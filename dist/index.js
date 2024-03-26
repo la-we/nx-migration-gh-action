@@ -41660,11 +41660,13 @@ function getInputs() {
     });
     const prTitle = core.getInput('prTitle', { required: false });
     const base = core.getInput('base', { required: false });
+    const path = core.getInput('path', { required: false });
     return {
         repoToken,
         includeMigrationsFile: Boolean(includeMigrationsFile),
         prTitle,
-        base
+        base,
+        path
     };
 }
 exports.getInputs = getInputs;
@@ -41712,6 +41714,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const core = __importStar(__nccwpck_require__(2186));
 const github = __importStar(__nccwpck_require__(5438));
+const path = __importStar(__nccwpck_require__(1017));
 const inputs_helper_1 = __nccwpck_require__(6188);
 const nx_version_1 = __nccwpck_require__(692);
 const git_1 = __nccwpck_require__(6350);
@@ -41721,8 +41724,9 @@ function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             const inputs = (0, inputs_helper_1.getInputs)();
+            const cwd = path.resolve(process.cwd(), inputs.path);
             const octokit = github.getOctokit(inputs.repoToken);
-            const currentNxVersion = (0, nx_version_1.getCurrentNxVersion)();
+            const currentNxVersion = (0, nx_version_1.getCurrentNxVersion)(cwd);
             core.debug(`Got version ${currentNxVersion} as current nx version`);
             const latestNxVersion = yield (0, nx_version_1.getLatestNxVersion)();
             core.debug(`Got version ${latestNxVersion} as latest nx version`);
@@ -41750,9 +41754,9 @@ function run() {
             const origin = `https://x-access-token:${inputs.repoToken}@github.com/${github.context.repo.owner}/${github.context.repo.repo}`;
             yield (0, git_1.prepareGit)(origin, branchName);
             core.debug('Installing deps...');
-            yield (0, exec_1.exec)('npm ci');
+            yield (0, exec_1.exec)('npm', ['ci'], { cwd: cwd });
             core.debug('Starting migrations...');
-            yield (0, nx_migrate_1.migrate)(inputs.includeMigrationsFile);
+            yield (0, nx_migrate_1.migrate)(inputs.includeMigrationsFile, cwd);
             core.debug('Pushing changes...');
             yield (0, git_1.pushChangesToRemote)(branchName);
             core.info(`Pushed changes to origin/${branchName}`);
@@ -41776,6 +41780,29 @@ run();
 
 "use strict";
 
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -41792,24 +41819,28 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.migrate = void 0;
 const exec_1 = __nccwpck_require__(1514);
 const fs_1 = __importDefault(__nccwpck_require__(7147));
-function migrate(keepMigrationsFile) {
+const path = __importStar(__nccwpck_require__(1017));
+function migrate(keepMigrationsFile, cwd) {
     return __awaiter(this, void 0, void 0, function* () {
         yield (0, exec_1.exec)('npx nx migrate latest', [], {
-            env: Object.assign(Object.assign({}, process.env), { npm_config_yes: String(true) })
+            env: Object.assign(Object.assign({}, process.env), { npm_config_yes: String(true) }),
+            cwd: cwd
         });
-        yield (0, exec_1.exec)('npm install');
-        yield (0, exec_1.exec)('npx nx migrate --run-migrations=migrations.json --create-commits', [], {
-            env: Object.assign(Object.assign({}, process.env), { npm_config_yes: String(true), NX_MIGRATE_SKIP_INSTALL: String(true) })
+        yield (0, exec_1.exec)('npm install', [], { cwd: cwd });
+        yield (0, exec_1.exec)('npx nx migrate --run-migrations=migrations.json', [], {
+            env: Object.assign(Object.assign({}, process.env), { npm_config_yes: String(true), NX_MIGRATE_SKIP_INSTALL: String(true) }),
+            cwd: cwd
         });
         // sometimes migrations change packages without installing them, so naivly install dependencies here again
-        yield (0, exec_1.exec)('npm install --package-lock-only');
+        yield (0, exec_1.exec)('npm install --package-lock-only', [], { cwd: cwd });
         if (!keepMigrationsFile) {
-            fs_1.default.unlinkSync('./migrations.json');
+            const migrationsPath = path.resolve(cwd, 'migrations.json');
+            fs_1.default.unlinkSync(migrationsPath);
         }
         yield (0, exec_1.exec)('bash', [
             '-c',
-            '(git add . && git commit -am "chore: [nx migration] changes") || true'
-        ]);
+            '(git add . :!nuget.config && git commit --no-verify -m "chore: [nx migration] changes")'
+        ], { cwd: cwd });
     });
 }
 exports.migrate = migrate;
@@ -41822,6 +41853,29 @@ exports.migrate = migrate;
 
 "use strict";
 
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -41838,8 +41892,10 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.getLatestNxVersion = exports.getCurrentNxVersion = void 0;
 const fs_1 = __importDefault(__nccwpck_require__(7147));
 const latest_version_1 = __importDefault(__nccwpck_require__(5228));
-function getCurrentNxVersion() {
-    const packageJson = fs_1.default.readFileSync('./package.json', 'utf8');
+const path = __importStar(__nccwpck_require__(1017));
+function getCurrentNxVersion(cwd) {
+    const packageJsonPath = path.resolve(cwd, 'package.json');
+    const packageJson = fs_1.default.readFileSync(packageJsonPath, 'utf8');
     const packageObject = JSON.parse(packageJson);
     if (!('nx' in packageObject.devDependencies)) {
         throw new Error('NX package can not be detected as dev dependency. Make sure you provided the correct package.json file and NX is installed.');

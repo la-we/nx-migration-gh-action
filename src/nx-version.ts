@@ -1,8 +1,10 @@
 import fs from 'fs'
 import latestVersion from 'latest-version'
+import * as path from 'path'
 
-export function getCurrentNxVersion(): string {
-  const packageJson = fs.readFileSync('./package.json', 'utf8')
+export function getCurrentNxVersion(cwd: string): string {
+  const packageJsonPath = path.resolve(cwd, 'package.json')
+  const packageJson = fs.readFileSync(packageJsonPath, 'utf8')
   const packageObject = JSON.parse(packageJson)
 
   if (!('nx' in packageObject.devDependencies)) {

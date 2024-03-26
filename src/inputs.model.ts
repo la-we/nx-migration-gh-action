@@ -2,5 +2,6 @@ export default interface Inputs {
   repoToken: string
   prTitle: string
   includeMigrationsFile: boolean
-  base: string
+  base: string,
+  path: string
 }

@@ -1,17 +1,20 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
+import * as path from "path";
 import {getInputs} from './inputs-helper'
 import {getCurrentNxVersion, getLatestNxVersion} from './nx-version'
 import {makePRBody, prepareGit, pushChangesToRemote} from './git'
 import {migrate} from './nx-migrate'
 import {exec} from '@actions/exec'
 
+
 async function run(): Promise<void> {
   try {
     const inputs = getInputs()
+    const cwd = path.resolve(process.cwd(), inputs.path)
     const octokit = github.getOctokit(inputs.repoToken)
 
-    const currentNxVersion = getCurrentNxVersion()
+    const currentNxVersion = getCurrentNxVersion(cwd)
     core.debug(`Got version ${currentNxVersion} as current nx version`)
     const latestNxVersion = await getLatestNxVersion()
     core.debug(`Got version ${latestNxVersion} as latest nx version`)
@@ -57,10 +60,10 @@ async function run(): Promise<void> {
     await prepareGit(origin, branchName)
 
     core.debug('Installing deps...')
-    await exec('npm ci')
+    await exec('npm', ['ci'], {cwd: cwd})
 
     core.debug('Starting migrations...')
-    await migrate(inputs.includeMigrationsFile)
+    await migrate(inputs.includeMigrationsFile, cwd)
 
     core.debug('Pushing changes...')
 

@@ -8,11 +8,13 @@ export function getInputs(): Inputs {
   })
   const prTitle = core.getInput('prTitle', {required: false})
   const base = core.getInput('base', {required: false})
+  const path = core.getInput('path', {required: false})
 
   return {
     repoToken,
     includeMigrationsFile: Boolean(includeMigrationsFile),
     prTitle,
-    base
+    base,
+    path
   }
 }
